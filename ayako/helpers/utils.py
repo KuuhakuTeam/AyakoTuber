@@ -5,7 +5,6 @@
 # PLease read the GNU v3.0 License Agreement in
 # <https://www.github.com/KuuhakuTeam/AyakoRobot/blob/master/LICENSE/>.
 
-import time
 import asyncio
 
 from random import sample

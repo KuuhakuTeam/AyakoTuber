@@ -27,6 +27,10 @@ from hydrogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     InputMediaPhoto,
+    InlineQuery,
+    InlineQueryResultArticle,
+    InlineQueryResultPhoto,
+    InputTextMessageContent,
 )
 
 from my_ytdl import Downloader, Mytdl
@@ -88,6 +92,77 @@ async def ytdl_handler(_, message: Message):
         caption = deatils.caption
         markup = deatils.buttons
         await message.reply_photo(photo=img, caption=caption, reply_markup=markup)
+
+
+@Ayako.on_inline_query()
+async def iytdl_handler(_, iq: InlineQuery):
+    results = []
+    user_id = iq.from_user.id
+    query = iq.query
+    match = _YT.match(query)
+    found_ = True
+    if match is None:
+        search_key = rand_key()
+        YT_DATA[search_key] = query
+        search = await VideosSearch(query).next()
+        if search["result"] == []:
+            found_ = False
+        i = search["result"][0]
+        out = f"<b><a href={i['link']}>{i['title']}</a></b>"
+        out += f"\nPublished {i['publishedTime']}\n"
+        out += f"\n<b>❯ Duration:</b> {i['duration']}"
+        out += f"\n<b>❯ Views:</b> {i['viewCount']['short']}"
+        out += f"\n<b>❯ Uploader:</b> <a href={i['channel']['link']}>{i['channel']['name']}</a>\n\n"
+        btn = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        f"1/{len(search['result'])}",
+                        callback_data=f"ytdl_scroll|{search_key}|1|{user_id}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "Download",
+                        callback_data=f"yt_gen|{i['id']}|{None}|{user_id}",
+                    )
+                ],
+            ]
+        )
+        img = await get_ytthumb(i["id"])
+        if found_:
+            results.append(
+                InlineQueryResultPhoto(
+                    photo_url=img,
+                    thumb_url=img,
+                    caption=out,
+                    reply_markup=btn,
+                )
+            )
+        else:
+            results.append(
+                InlineQueryResultArticle(
+                    title="not found",
+                    input_message_content=InputTextMessageContent(
+                        f"No result found for `{query}`"
+                    ),
+                    description="INVALID",
+                )
+            )
+    else:
+        key = match.group("id")
+        deatils = Mytdl.get_download_button(key, user_id)
+        img = await get_ytthumb(key)
+        results = [
+                InlineQueryResultPhoto(
+                    photo_url=img,
+                    thumb_url=img,
+                    caption=deatils.caption,
+                    reply_markup=deatils.buttons,
+                )
+            ]
+    await iq.answer(results=results, is_gallery=False, is_personal=True)
+    iq.stop_propagation()
 
 
 @Ayako.on_callback_query(filters=filters.regex(pattern=r"ytdl_scroll\|(.*)"))
@@ -233,6 +308,7 @@ async def download_handler(_, cq: CallbackQuery):
     except Exception as e:
         logging.error(e)
         return
+
 
 async def ping_(_, message):
     start = datetime.now()

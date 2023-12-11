@@ -2,3 +2,6 @@ hydrogram
 youtube-search-python
 tgcrypto
 pymongo
+yt_dlp
+wget
+motor
