@@ -13,6 +13,7 @@ import requests
 import tempfile
 
 from uuid import uuid4
+from wget import download
 from datetime import datetime
 
 from hydrogram import filters
@@ -27,13 +28,13 @@ from hydrogram.types import (
 )
 
 from iytdl import main
-from iytdl.upload_lib.uploader import Uploader
+
+from my_ytdl import Downloader, Mytdl
+
 
 from .. import Ayako
-from ..config import DEV, TRIGGER
-from ..helpers.utils import uptime, rnd_key
-from ..ytdl import Mytdl
-from ..ytdl.download import Downloader
+from ..config import TRIGGER
+from ..helpers.utils import uptime
 
 
 _YT = re.compile(
@@ -43,7 +44,9 @@ _YT = re.compile(
 
 logger = logging.getLogger(__name__)
 
+
 YT_DATA = {}
+
 
 @Ayako.on_message(filters.command(["ytdl"], TRIGGER))
 async def ytdl_handler(_, message: Message):
@@ -71,7 +74,12 @@ async def ytdl_handler(_, message: Message):
                         callback_data=f"ytdl_scroll|{search_key}|1|{message.from_user.id}",
                     )
                 ],
-                [InlineKeyboardButton("Download", callback_data=f"yt_gen|{i['id']}|{None}|{message.from_user.id}")],
+                [
+                    InlineKeyboardButton(
+                        "Download",
+                        callback_data=f"yt_gen|{i['id']}|{None}|{message.from_user.id}",
+                    )
+                ],
             ]
         )
         img = await get_ytthumb(i["id"])
@@ -121,13 +129,21 @@ async def ytdl_scroll_callback(_, cq: CallbackQuery):
             scroll_btn = [[scroll_btn.pop().pop()]]
         elif page == (len(search["result"]) - 1):
             scroll_btn = [[scroll_btn.pop().pop(0)]]
-        btn = [[InlineKeyboardButton("Download", callback_data=f"yt_gen|{i['id']}|{None}|{user_id}")]]
+        btn = [
+            [
+                InlineKeyboardButton(
+                    "Download", callback_data=f"yt_gen|{i['id']}|{None}|{user_id}"
+                )
+            ]
+        ]
         btn = InlineKeyboardMarkup(scroll_btn + btn)
         await cq.edit_message_media(
             InputMediaPhoto(await get_ytthumb(i["id"]), caption=out), reply_markup=btn
         )
     except KeyError:
-        return await cq.answer("error when obtaining information, perform a new search", show_alert=True)
+        return await cq.answer(
+            "error when obtaining information, perform a new search", show_alert=True
+        )
 
 
 @Ayako.on_callback_query(filters=filters.regex(pattern=r"yt_(gen|dl)\|(.*)"))
@@ -143,16 +159,17 @@ async def download_handler(_, cq: CallbackQuery):
     else:
         uid = callback[2]
         type_ = callback[4]
+        with tempfile.TemporaryDirectory() as tempdir:
+            path_ = os.path.join(tempdir, "ytdl")
+        thumb = download(get_ytthumb(key), path_)
         if type_ == "a":
             format_ = "audio"
         else:
             format_ = "video"
 
-        await cq.edit_message_caption(caption="Baixando...")
+        await cq.edit_message_caption(caption="<b>Downloading wait...</b>")
 
-        with tempfile.TemporaryDirectory() as tempdir:
-            path_ = os.path.join(tempdir, "ytdl")
-        print(path_)
+
         if format_ == "video":
             options = {
                 "addmetadata": True,
@@ -170,9 +187,13 @@ async def download_handler(_, cq: CallbackQuery):
             file, duration, title = Downloader.ytdownloader(
                 url=f"https://www.youtube.com/watch?v={key}", options=options
             )
-            await cq.edit_message_media(
-                media=InputMediaVideo(media=file, duration=duration, caption=title)
+            await cq.edit_message_caption(
+                caption="<b>Uploading video may take a few moments.</b>"
             )
+            await cq.edit_message_media(
+                media=InputMediaVideo(media=file, duration=duration, caption=title, thumb=thumb)
+            )
+
         elif format_ == "audio":
             options = {
                 "outtmpl": os.path.join(path_, "%(title)s-%(format)s.%(ext)s"),
@@ -197,12 +218,15 @@ async def download_handler(_, cq: CallbackQuery):
             file, duration, title = Downloader.ytdownloader(
                 url=f"https://www.youtube.com/watch?v={key}", options=options
             )
+
+            await cq.edit_message_caption(
+                caption="<b>Uploading audio may take a few moments.</b>"
+            )
             await cq.edit_message_media(
-                media=InputMediaAudio(media=file, duration=duration, caption=title)
+                media=InputMediaAudio(media=file, duration=duration, caption=title, thumb=thumb)
             )
         else:
             await cq.answer("format not suport", show_alert=True)
-        os.remove(file)
         shutil.rmtree(tempdir)
 
 
