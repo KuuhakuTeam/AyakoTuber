@@ -15,7 +15,7 @@ import tempfile
 from uuid import uuid4
 from wget import download
 from datetime import datetime
-from youtubesearchpython import VideosSearch
+from youtubesearchpython.__future__ import VideosSearch
 
 from hydrogram import filters
 from hydrogram.errors import MessageNotModified
@@ -228,10 +228,11 @@ async def download_handler(_, cq: CallbackQuery):
                 await cq.answer("format not suport", show_alert=True)
             os.remove(thumb)
             shutil.rmtree(tempdir)
-    except (Exception, MessageNotModified):
-        logging.error(Exception or MessageNotModified)
+    except MessageNotModified:
         return
-
+    except Exception as e:
+        logging.error(e)
+        return
 
 async def ping_(_, message):
     start = datetime.now()

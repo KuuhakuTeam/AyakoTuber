@@ -62,8 +62,15 @@ async def run_better():
 async def main():
     await db_connect()
     await run_better()
-    await idle()
 
-
-if __name__ == "__main__":
-    asyncio.get_event_loop().run_until_complete(main())
+if __name__ == "__main__" :
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(main())
+        idle()
+    except KeyboardInterrupt:
+        exit()
+    except Exception as err:
+        logging.error(err.with_traceback(None))
+    finally:
+        loop.stop()
