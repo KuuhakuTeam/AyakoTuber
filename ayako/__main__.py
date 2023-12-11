@@ -5,11 +5,9 @@
 # PLease read the GNU v3.0 License Agreement in
 # <https://www.github.com/KuuhakuTeam/AyakoRobot/blob/master/LICENSE/>.
 
-import time
 import asyncio
 import logging
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from pymongo.errors import ConnectionFailure
 from logging.handlers import RotatingFileHandler
 
@@ -37,11 +35,6 @@ logging.getLogger("hydrogram").setLevel(logging.WARNING)
 logging.getLogger("hydrogram.parser.html").setLevel(logging.ERROR)
 logging.getLogger("hydrogram.session.session").setLevel(logging.ERROR)
 
-
-scheduler = AsyncIOScheduler(timezone="America/Sao_Paulo")
-start_time = time.time()
-
-
 async def db_connect():
     """Check Mongo Client"""
     try:
@@ -63,7 +56,7 @@ async def run_better():
     await Ayako.send_message(
         chat_id=GP_LOGS, text=f"[ Ayako ] Bot iniciado com sucesso ...\nVersion: <code>{VERSION}</code>"
     )
-    logging.info("[ Ayako Schedule ] Bot iniciado com sucesso ...\n")
+    logging.info("[ Ayako ] Bot iniciado com sucesso ...\n")
 
 
 async def main():

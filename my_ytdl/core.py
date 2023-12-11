@@ -7,9 +7,9 @@ from typing import Dict, List
 
 from hydrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from iytdl.types import SearchResult
-
 from ayako.helpers.utils import humanbytes, sublists
+
+from .search import SearchResult
 
 
 YT = "https://www.youtube.com/"
@@ -18,16 +18,6 @@ YT_VID_URL = YT + "watch?v="
 
 class Mytdl:
     def get_download_button(yt_id: str, user_id: int) -> SearchResult:
-        """Generate Inline Buttons for YouTube Video
-
-        Parameters:
-        ----------
-            - yt_id (`str`): YouTube video key.
-
-        Returns:
-        -------
-            `SearchResult`: `~iytdl.types.SearchResult`
-        """
         buttons = [
             [
                 InlineKeyboardButton(

@@ -1,3 +1,2 @@
-from .core import Mytdl
-from .download import Downloader
-from .progress import progress
+from .core import Mytdl  # noqa: F401
+from .download import Downloader  # noqa: F401

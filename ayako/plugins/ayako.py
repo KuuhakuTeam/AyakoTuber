@@ -15,8 +15,10 @@ import tempfile
 from uuid import uuid4
 from wget import download
 from datetime import datetime
+from youtubesearchpython import VideosSearch
 
 from hydrogram import filters
+from hydrogram.errors import MessageNotModified
 from hydrogram.types import (
     Message,
     CallbackQuery,
@@ -27,28 +29,21 @@ from hydrogram.types import (
     InputMediaPhoto,
 )
 
-from iytdl import main
-
 from my_ytdl import Downloader, Mytdl
 
-
 from .. import Ayako
-from ..config import TRIGGER
-from ..helpers.utils import uptime
 
 
 _YT = re.compile(
-    r"(https?://)?(www\.)?(youtube|youtu|youtube-nocookie)\.(com|be)/(watch\?v=|embed/|v/|.+\?v=)?(?P<id>[A-Za-z0-9\-=_]{11})"
+    r"(?m)http(?:s?):\/\/(?:www\.)?(?:music\.)?youtu(?:be\.com\/(watch\?v=|shorts/|embed/)|\.be\/|)(?P<id>([\w\-\_]{11}))(&(amp;)?‌​[\w\?‌​=]*)?"
 )
 
 
 logger = logging.getLogger(__name__)
 
-
 YT_DATA = {}
 
 
-@Ayako.on_message(filters.command(["ytdl"], TRIGGER))
 async def ytdl_handler(_, message: Message):
     query = input_str(message)
     if not query:
@@ -57,7 +52,7 @@ async def ytdl_handler(_, message: Message):
     if match is None:
         search_key = rand_key()
         YT_DATA[search_key] = query
-        search = await main.VideosSearch(query).next()
+        search = await VideosSearch(query).next()
         if search["result"] == []:
             return await message.reply(f"No result found for `{query}`")
         i = search["result"][0]
@@ -105,7 +100,7 @@ async def ytdl_scroll_callback(_, cq: CallbackQuery):
         return await cq.answer("not for you", show_alert=True)
     try:
         query = YT_DATA[search_key]
-        search = await main.VideosSearch(query).next()
+        search = await VideosSearch(query).next()
         i = search["result"][page]
         out = f"<b><a href={i['link']}>{i['title']}</a></b>"
         out += f"\nPublished {i['publishedTime']}\n"
@@ -140,7 +135,7 @@ async def ytdl_scroll_callback(_, cq: CallbackQuery):
         await cq.edit_message_media(
             InputMediaPhoto(await get_ytthumb(i["id"]), caption=out), reply_markup=btn
         )
-    except KeyError:
+    except (KeyError, MessageNotModified):
         return await cq.answer(
             "error when obtaining information, perform a new search", show_alert=True
         )
@@ -153,100 +148,110 @@ async def download_handler(_, cq: CallbackQuery):
     user_id = int(callback[3])
     if not cq.from_user.id == user_id:
         return await cq.answer("not for you", show_alert=True)
-    if callback[0] == "yt_gen":
-        x = Mytdl.get_download_button(key, user_id)
-        await cq.edit_message_caption(caption=x.caption, reply_markup=x.buttons)
-    else:
-        uid = callback[2]
-        type_ = callback[4]
-        with tempfile.TemporaryDirectory() as tempdir:
-            path_ = os.path.join(tempdir, "ytdl")
-        thumb = download(get_ytthumb(key), path_)
-        if type_ == "a":
-            format_ = "audio"
+    try:
+        if callback[0] == "yt_gen":
+            x = Mytdl.get_download_button(key, user_id)
+            await cq.edit_message_caption(caption=x.caption, reply_markup=x.buttons)
         else:
-            format_ = "video"
+            uid = callback[2]
+            type_ = callback[4]
+            with tempfile.TemporaryDirectory() as tempdir:
+                path_ = os.path.join(tempdir, "ytdl")
+            thumb = download(await get_ytthumb(key), "ayako/downloads/")
+            if type_ == "a":
+                format_ = "audio"
+            else:
+                format_ = "video"
 
-        await cq.edit_message_caption(caption="<b>Downloading wait...</b>")
+            await cq.edit_message_caption(caption="<b>Downloading wait...</b>")
+
+            if format_ == "video":
+                options = {
+                    "addmetadata": True,
+                    "geo_bypass": True,
+                    "nocheckcertificate": True,
+                    "outtmpl": os.path.join(path_, "%(title)s-%(format)s.%(ext)s"),
+                    "logger": logger,
+                    "format": uid,
+                    "writethumbnail": True,
+                    "prefer_ffmpeg": True,
+                    "postprocessors": [{"key": "FFmpegMetadata"}],
+                    "quiet": True,
+                    "logtostderr": True,
+                }
+                file, duration, title = Downloader.ytdownloader(
+                    url=f"https://www.youtube.com/watch?v={key}", options=options
+                )
+                await cq.edit_message_caption(
+                    caption="<b>Uploading video may take a few moments.</b>"
+                )
+                await cq.edit_message_media(
+                    media=InputMediaVideo(
+                        media=file, duration=duration, caption=title, thumb=thumb
+                    )
+                )
+
+            elif format_ == "audio":
+                options = {
+                    "outtmpl": os.path.join(path_, "%(title)s-%(format)s.%(ext)s"),
+                    "logger": logger,
+                    "writethumbnail": True,
+                    "prefer_ffmpeg": True,
+                    "format": "bestaudio/best",
+                    "geo_bypass": True,
+                    "nocheckcertificate": True,
+                    "postprocessors": [
+                        {
+                            "key": "FFmpegExtractAudio",
+                            "preferredcodec": "mp3",
+                            "preferredquality": uid,
+                        },
+                        {"key": "EmbedThumbnail"},
+                        {"key": "FFmpegMetadata"},
+                    ],
+                    "quiet": True,
+                    "logtostderr": True,
+                }
+                file, duration, title = Downloader.ytdownloader(
+                    url=f"https://www.youtube.com/watch?v={key}", options=options
+                )
+
+                await cq.edit_message_caption(
+                    caption="<b>Uploading audio may take a few moments.</b>"
+                )
+                await cq.edit_message_media(
+                    media=InputMediaAudio(
+                        media=file, duration=duration, caption=title, thumb=thumb
+                    )
+                )
+            else:
+                await cq.answer("format not suport", show_alert=True)
+            os.remove(thumb)
+            shutil.rmtree(tempdir)
+    except (Exception, MessageNotModified):
+        logging.error(Exception or MessageNotModified)
+        return
 
 
-        if format_ == "video":
-            options = {
-                "addmetadata": True,
-                "geo_bypass": True,
-                "nocheckcertificate": True,
-                "outtmpl": os.path.join(path_, "%(title)s-%(format)s.%(ext)s"),
-                "logger": logger,
-                "format": uid,
-                "writethumbnail": True,
-                "prefer_ffmpeg": True,
-                "postprocessors": [{"key": "FFmpegMetadata"}],
-                "quiet": True,
-                "logtostderr": True,
-            }
-            file, duration, title = Downloader.ytdownloader(
-                url=f"https://www.youtube.com/watch?v={key}", options=options
-            )
-            await cq.edit_message_caption(
-                caption="<b>Uploading video may take a few moments.</b>"
-            )
-            await cq.edit_message_media(
-                media=InputMediaVideo(media=file, duration=duration, caption=title, thumb=thumb)
-            )
-
-        elif format_ == "audio":
-            options = {
-                "outtmpl": os.path.join(path_, "%(title)s-%(format)s.%(ext)s"),
-                "logger": logger,
-                "writethumbnail": True,
-                "prefer_ffmpeg": True,
-                "format": "bestaudio/best",
-                "geo_bypass": True,
-                "nocheckcertificate": True,
-                "postprocessors": [
-                    {
-                        "key": "FFmpegExtractAudio",
-                        "preferredcodec": "mp3",
-                        "preferredquality": uid,
-                    },
-                    {"key": "EmbedThumbnail"},
-                    {"key": "FFmpegMetadata"},
-                ],
-                "quiet": True,
-                "logtostderr": True,
-            }
-            file, duration, title = Downloader.ytdownloader(
-                url=f"https://www.youtube.com/watch?v={key}", options=options
-            )
-
-            await cq.edit_message_caption(
-                caption="<b>Uploading audio may take a few moments.</b>"
-            )
-            await cq.edit_message_media(
-                media=InputMediaAudio(media=file, duration=duration, caption=title, thumb=thumb)
-            )
-        else:
-            await cq.answer("format not suport", show_alert=True)
-        shutil.rmtree(tempdir)
-
-
-@Ayako.on_message(filters.command("ping", TRIGGER))
 async def ping_(_, message):
     start = datetime.now()
     replied = await message.reply("pong!")
     end = datetime.now()
     m_s = (end - start).microseconds / 1000
-    await replied.edit(f"ping: `{m_s}𝚖𝚜`\nuptime: `{uptime()}`")
+    await replied.edit(f"ping: `{m_s}𝚖𝚜`")
 
 
-@Ayako.on_message(filters.command(["start", "help"], TRIGGER))
 async def start_(_, message: Message):
-    await message.reply("<i>ayakou.</i>")
+    msg = """
+<b>Hello friend, I'm <a href="https://t.me/ayako_robot">Ayako</a>, the most advanced YouTube and audio/video downloader on Telegram!</b>
+
+» <i>This bot is currently under development and may contain bugs</i>
+» <i>Consider <a href="https://t.me/KuuhakuTeam">joining our channel</a> to stay up to date with updates</i>
+    """
+    await message.reply(msg)
 
 
 ### funcs
-
-
 def input_str(message) -> str:
     """input string"""
     input_ = message.text

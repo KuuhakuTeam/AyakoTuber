@@ -12,7 +12,7 @@ from random import sample
 from functools import partial, wraps
 from typing import Any, Awaitable, Callable, List, Union
 
-from .. import start_time
+
 
 _CHAR: List[str] = list("_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxy")
 
@@ -44,11 +44,6 @@ def time_formatter(seconds: float) -> str:
         + ((str(seconds) + "s, ") if seconds else "")
     )
     return tmp[:-2]
-
-
-def uptime():
-    """bot uptime"""
-    return time_formatter(time.time() - start_time)
 
 
 def sublists(input_list: List[Any], width: int = 3) -> List[List[Any]]:

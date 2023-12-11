@@ -7,8 +7,6 @@
 
 import ayako
 
-from .utils import humanbytes, time_formatter, run_sync
+from .utils import humanbytes, time_formatter, run_sync  # noqa: F401
 
-
-db = ayako.db_core["AyakoRobot"]
 
